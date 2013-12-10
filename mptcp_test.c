@@ -18,52 +18,10 @@
 
 #define MAXDATASIZE 100 // max number of bytes we can get at once 
 
-
-void hexDump (char *desc, void *addr, int len) {
-	// source: http://stackoverflow.com/questions/7775991/how-to-get-hexdump-of-a-structure-data
-	int i;
-	unsigned char buff[17];
-	unsigned char *pc = addr;
-
-	// Output description if given.
-	if (desc != NULL)
-		printf ("%s:\n", desc);
-
-	// Process every byte in the data.
-	for (i = 0; i < len; i++) {
-		// Multiple of 16 means new line (with line offset).
-
-		if ((i % 16) == 0) {
-			// Just don't print ASCII for the zeroth line.
-			if (i != 0)
-				printf ("  %s\n", buff);
-
-			// Output the offset.
-			printf ("  %04x ", i);
-		}
-
-		// Now the hex code for the specific character.
-		printf (" %02x", pc[i]);
-
-		// And store a printable ASCII character for later.
-		if ((pc[i] < 0x20) || (pc[i] > 0x7e))
-			buff[i % 16] = '.';
-		else
-			buff[i % 16] = pc[i];
-		buff[(i % 16) + 1] = '\0';
-	}
-
-	// Pad out last line if not exactly 16 characters.
-	while ((i % 16) != 0) {
-		printf ("   ");
-		i++;
-	}
-	puts("\n");
-}
+#define MPTCP_MAX_ADDR 8 // XXX: copypasted from kernel headers
 
 void print_subflows(int sockfd) {
-#define OPTVAL_MAX 1000
-	unsigned char optval[OPTVAL_MAX];
+	struct mptcp_subflow optval[MPTCP_MAX_ADDR];
 	socklen_t optlen = sizeof optval;
 	int res = getsockopt(sockfd, SOL_TCP, TCP_MULTIPATH_SUBFLOWS, &optval, &optlen);
 	printf("optlen = %u\n", optlen);
@@ -71,7 +29,31 @@ void print_subflows(int sockfd) {
 		perror("getsockopt(..., TCP_MULTIPATH_SUBFLOWS,...)");
 		return;
 	}
-	hexDump("Subflows", optval, optlen);
+	int num_subflows = optlen / sizeof(struct mptcp_subflow);
+	if (num_subflows * sizeof(struct mptcp_subflow) != (unsigned)optlen) {
+		printf("something went terribly wrong here. ABI problem? padding?\n");
+		exit(1);
+	}
+	printf("Subflow list:\n");
+	char loc_addr[INET6_ADDRSTRLEN];
+	char rem_addr[INET6_ADDRSTRLEN];
+	int i;
+	for (i=0; i < num_subflows; i++) {
+
+		if (optval[i].family == AF_INET) {
+			inet_ntop(AF_INET, &optval[i].saddr, loc_addr, sizeof loc_addr);
+			inet_ntop(AF_INET, &optval[i].daddr, rem_addr, sizeof rem_addr);
+		} else if (optval[i].family == AF_INET6) {
+			inet_ntop(AF_INET6, &optval[i].saddr6, loc_addr, sizeof loc_addr);
+			inet_ntop(AF_INET6, &optval[i].daddr6, rem_addr, sizeof rem_addr);
+		} else {
+			exit(2);
+		}
+		printf("\t#% 2i: %s:%hu\t<->\t%s:%hu\n", i,
+				loc_addr, ntohs(optval[i].sport),
+				rem_addr, ntohs(optval[i].dport));
+	}
+	//hexDump("Subflows", optval, optlen);
 }
 
 void print_connid(int sockfd) {
