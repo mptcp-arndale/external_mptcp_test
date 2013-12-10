@@ -58,6 +58,7 @@ void hexDump (char *desc, void *addr, int len) {
 		printf ("   ");
 		i++;
 	}
+	puts("\n");
 }
 
 void print_subflows(int sockfd) {
@@ -68,7 +69,6 @@ void print_subflows(int sockfd) {
 	printf("optlen = %u\n", optlen);
 	if (res != 0) {
 		perror("getsockopt(..., TCP_MULTIPATH_SUBFLOWS,...)");
-		close(sockfd);
 		return;
 	}
 	hexDump("Subflows", optval, optlen);
@@ -81,7 +81,6 @@ void print_connid(int sockfd) {
 	printf("optlen = %u\n", optlen);
 	if (res != 0) {
 		perror("getsockopt(..., TCP_MULTIPATH_CONNID,...)");
-		close(sockfd);
 		return;
 	}
 	if (optlen != sizeof(optval))
@@ -155,6 +154,14 @@ int main(int argc, char *argv[])
 
 
 	print_connid(sockfd);
+	print_subflows(sockfd);
+	printf("sending some data...\n");
+	char request[100];
+	memset(request, 'A', sizeof request);
+	send(sockfd, request, sizeof request, 0);
+	print_subflows(sockfd);
+	printf("sleep 1...\n");
+	sleep(1);
 	print_subflows(sockfd);
 
 	if ((numbytes = recv(sockfd, buf, MAXDATASIZE-1, 0)) == -1) {
